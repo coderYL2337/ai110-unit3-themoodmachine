@@ -65,3 +65,7 @@ During this lab you will:
 - When debugging, print tokens, scores, or intermediate choices.
 - Ask an AI assistant to help create edge case posts or unusual wording.
 - Try examples that mislead or confuse your model. Failure cases teach you the most.
+
+# Summary 
+
+This tinker focused on building and evaluating both rule-based and machine learning mood classifiers for short text. The core concept students needed to understand was how language features—like keywords, negation, slang, and emojis—affect mood classification, and how both rules and data shape model behavior. Students are most likely to struggle with edge cases: sarcasm, mixed emotions, ambiguous or neutral statements, and the impact of label choices on ML model performance. AI was helpful for quickly generating realistic examples, expanding datasets, and suggesting rule improvements, but sometimes misleading when it came to subtle context, sarcasm, or overfitting to specific patterns. To guide a student without giving the answer, encourage them to test their model on tricky examples (e.g., sarcasm or "but" sentences), reflect on why the model failed, and iterate on both their rules and dataset. Remind them that model performance is tightly linked to the diversity and quality of their labeled data, and that no model is perfect—understanding limitations is part of the learning process.

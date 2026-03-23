@@ -36,54 +36,78 @@ class MoodAnalyzer:
     # Preprocessing
     # ---------------------------------------------------------------------
 
-    def preprocess(self, text: str) -> List[str]:
+    def preprocess(self, text: str, print_tokens: bool = False) -> List[str]:
         """
         Convert raw text into a list of tokens the model can work with.
 
-        TODO: Improve this method.
-
-        Right now, it does the minimum:
+        Improvements:
           - Strips leading and trailing whitespace
           - Converts everything to lowercase
+          - Removes punctuation
           - Splits on spaces
-
-        Ideas to improve:
-          - Remove punctuation
-          - Handle simple emojis separately (":)", ":-(", "🥲", "😂")
-          - Normalize repeated characters ("soooo" -> "soo")
+          - Prints tokens for confirmation
         """
+        import string
         cleaned = text.strip().lower()
+        # Remove punctuation (except emojis)
+        cleaned = cleaned.translate(str.maketrans('', '', string.punctuation))
         tokens = cleaned.split()
-
+        if print_tokens:
+          print(f"[preprocess] tokens: {tokens}")
         return tokens
 
     # ---------------------------------------------------------------------
     # Scoring logic
     # ---------------------------------------------------------------------
 
-    def score_text(self, text: str) -> int:
+    def score_text(self, text: str, tokens: List[str] = None) -> int:
         """
         Compute a numeric "mood score" for the given text.
 
         Positive words increase the score.
         Negative words decrease the score.
 
-        TODO: You must choose AT LEAST ONE modeling improvement to implement.
-        For example:
-          - Handle simple negation such as "not happy" or "not bad"
-          - Count how many times each word appears instead of just presence
-          - Give some words higher weights than others (for example "hate" < "annoyed")
-          - Treat emojis or slang (":)", "lol", "💀") as strong signals
+        Enhancement: Handle simple negation (e.g., "not happy" or "not bad").
         """
-        # TODO: Implement this method.
-        #   1. Call self.preprocess(text) to get tokens.
-        #   2. Loop over the tokens.
-        #   3. Increase the score for positive words, decrease for negative words.
-        #   4. Return the total score.
-        #
-        # Hint: if you implement negation, you may want to look at pairs of tokens,
-        # like ("not", "happy") or ("never", "fun").
-        pass
+        if tokens is None:
+          tokens = self.preprocess(text)
+        score = 0
+        negation_words = {"not", "never", "no", "n't"}
+        negate_next = False
+
+        # Phrase-based scoring (positive and negative)
+        import string
+        cleaned = text.strip().lower()
+        cleaned = cleaned.translate(str.maketrans('', '', string.punctuation))
+        # Check for multi-word positive phrases
+        for phrase in self.positive_words:
+            if " " in phrase and phrase in cleaned:
+                score += 1
+        # Check for multi-word negative phrases
+        for phrase in self.negative_words:
+            if " " in phrase and phrase in cleaned:
+                score -= 1
+
+        # Single-token scoring
+        for token in tokens:
+            if token in negation_words:
+                negate_next = True
+                continue
+            if token in self.positive_words and " " not in token:
+                if negate_next:
+                    score -= 1
+                else:
+                    score += 1
+                negate_next = False
+            elif token in self.negative_words and " " not in token:
+                if negate_next:
+                    score += 1
+                else:
+                    score -= 1
+                negate_next = False
+            else:
+                negate_next = False
+        return score
 
     # ---------------------------------------------------------------------
     # Label prediction
@@ -98,19 +122,115 @@ class MoodAnalyzer:
           - score < 0  -> "negative"
           - score == 0 -> "neutral"
 
-        TODO: You can adjust this mapping if it makes sense for your model.
-        For example:
-          - Use different thresholds (for example score >= 2 to be "positive")
-          - Add a "mixed" label for scores close to zero
-        Just remember that whatever labels you return should match the labels
-        you use in TRUE_LABELS in dataset.py if you care about accuracy.
+        You can adjust this mapping if it makes sense for your model.
         """
-        # TODO: Implement this method.
-        #   1. Call self.score_text(text) to get the numeric score.
-        #   2. Return "positive" if the score is above 0.
-        #   3. Return "negative" if the score is below 0.
-        #   4. Return "neutral" otherwise.
-        pass
+        tokens = self.preprocess(text, print_tokens=True)
+        pos_count = sum(1 for t in tokens if t in self.positive_words)
+        neg_count = sum(1 for t in tokens if t in self.negative_words)
+        score = self.score_text(text, tokens=tokens)
+
+        lowered = text.strip().lower()
+
+        # Flexible sarcasm_starts: allow adverbs between 'i' and 'love'
+        import re
+        sarcasm_starts = bool(re.match(r"i( [a-z]+)* love( it)? when", lowered)) or \
+          lowered.startswith("i just love when") or \
+          lowered.startswith("gotta love when") or \
+          lowered.startswith("i love ")
+
+        # Strong sarcasm: contains 🙃 and starts with a positive phrase
+        if sarcasm_starts and "🙃" in lowered:
+          return "negative"
+
+        # If 🙃 is present anywhere, flip the predicted label (do this before other logic)
+        if "🙃" in lowered:
+          # Predict as usual, then flip
+          if (pos_count > 0 or neg_count > 0) and " but " in lowered:
+            base_label = "mixed"
+          elif pos_count > 0 and neg_count > 0:
+            base_label = "mixed"
+          elif score > 0:
+            base_label = "positive"
+          elif score < 0:
+            base_label = "negative"
+          else:
+            base_label = "neutral"
+          if base_label == "positive":
+            return "negative"
+          elif base_label == "negative":
+            return "positive"
+          elif base_label == "neutral":
+            return "negative"
+          else:
+            return base_label
+
+        sarcasm = False
+
+        # If 🙃 is present anywhere, flip the predicted label
+        if "🙃" in lowered:
+          # Predict as usual, then flip
+          if (pos_count > 0 or neg_count > 0) and " but " in lowered:
+            base_label = "mixed"
+          elif pos_count > 0 and neg_count > 0:
+            base_label = "mixed"
+          elif score > 0:
+            base_label = "positive"
+          elif score < 0:
+            base_label = "negative"
+          else:
+            base_label = "neutral"
+          if base_label == "positive":
+            return "negative"
+          elif base_label == "negative":
+            return "positive"
+          elif base_label == "neutral":
+            return "negative"
+          else:
+            return base_label
+        has_and_or_but = (" and " in lowered or " but " in lowered)
+        if sarcasm_starts:
+          # If 'and' or 'but' present, check after them for negative word
+          if has_and_or_but:
+            for sep in [" and ", " but "]:
+              if sep in lowered:
+                after = lowered.split(sep, 1)[1]
+                for neg in self.negative_words:
+                  if neg in after:
+                    sarcasm = True
+                    break
+              if sarcasm:
+                break
+          else:
+            # Otherwise, check if a negative word appears anywhere after the start phrase
+            if lowered.startswith("i love it when"):
+              after = lowered[len("i love it when"):].strip()
+            elif lowered.startswith("i just love when"):
+              after = lowered[len("i just love when"):].strip()
+            elif lowered.startswith("gotta love when"):
+              after = lowered[len("gotta love when"):].strip()
+            elif lowered.startswith("i love "):
+              after = lowered[len("i love "):].strip()
+            else:
+              after = lowered
+            for neg in self.negative_words:
+              if neg in after:
+                sarcasm = True
+                break
+        if sarcasm:
+          return "negative"
+
+        # 'but' as a strong signal for mixed: if 'but' is present and at least one positive or negative word is present
+        if (pos_count > 0 or neg_count > 0) and " but " in lowered:
+          return "mixed"
+        # If both positive and negative words are present, label as mixed
+        if pos_count > 0 and neg_count > 0:
+          return "mixed"
+        if score > 0:
+          return "positive"
+        elif score < 0:
+          return "negative"
+        else:
+          return "neutral"
 
     # ---------------------------------------------------------------------
     # Explanations (optional but recommended)
